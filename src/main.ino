@@ -15,37 +15,9 @@
 
 #define PORT 8101
 
+#define IDLE_SEQ_DELAY 10000
+
 WiFiServer server(PORT);
-
-void setup()
-{
-  Serial.begin(115200);
-
-  WiFi.hostname("tooth1");
-  WiFi.begin("robotoverlords", "TODO");
-
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
-
-  // TODO Wire.setClock(400000);
-
-  Wire.begin(); // join i2c bus (address optional for master)
-
-  Serial.print("Listening on port ");
-  Serial.println(PORT);
-  server.begin();
-
-  Serial.println("Setup complete");
-}
-
 
 #define DEV1 64
 #define DEV2 65
@@ -68,22 +40,35 @@ void writeFreq(uint8_t device, uint16_t fA, uint16_t fB, uint8_t vA, uint8_t vB)
   writeBuf(device, buf, 6);
 }
 
+
 // Data is loaded onto the microcontroller in "frames" (chunks),
 // effectively making this a ring buffer with NFRAME items of length
 // FRAME_SAMPLES.
 // Note the STM32F030F4 has only 4K SRAM so this buffer must stay small
-#define NFRAME 4
-#define FRAME_SAMPLES 200*2
-uint8_t wav_buffer[NFRAME][FRAME_SAMPLES];
+#define FRAME_SAMPLES 64*2
+uint8_t wav_buffer[FRAME_SAMPLES];
 // TODO 2 channel buffer
-volatile uint8_t frame_idx;  // Where to read sample data
-volatile uint8_t frame_buf_idx; // Where to write the next incoming frame
-volatile uint16_t sample_idx; // Which sample in frame_idx to read next
 void writeFrame(uint8_t device, uint8_t* frameptr) {
   Wire.beginTransmission(device);
   Wire.write(frameptr, FRAME_SAMPLES);
   Wire.endTransmission();
 }
+
+void demoWav() {
+  Serial.println("Starting wav mode");
+  writeFreq(DEV1, 0, 0, 255, 255); // Start wav mode
+  writeFreq(DEV2, 0, 0, 255, 255); // Start wav mode
+  // Keep the buffer filled
+  for (uint16_t i = 0; i < FRAME_SAMPLES; i+= 2) { // Skip every other byte; only fill channel 1
+      wav_buffer[i] = i & 0xff; // Simple sawtooth, 8 bits @ 44.1kHz ~= 172 Hz tone
+  }
+  while (1) {
+    writeFrame(DEV1, wav_buffer);
+    writeFrame(DEV2, wav_buffer);
+    delay(10);
+  }
+}
+
 
 void chord(uint16_t fA, uint16_t fB, uint16_t fC, uint8_t vol) {
   writeFreq(DEV1, fA, 0, vol, vol);
@@ -95,6 +80,55 @@ void off() {
   writeFreq(DEV2, 0, 0, 0, 0);
 }
 
+void idleSeq() {
+  chord(660, 784, 1047, 255);
+  delay(100);
+  off();
+  delay(100);
+  chord(660, 784, 1047, 255);
+  delay(700);
+  off();
+}
+
+void setup()
+{
+  Serial.begin(115200);
+
+  // Wire.setClock(400000); // FAST I2C Mode
+  Wire.begin(); // join i2c bus (address optional for master)
+  chord(660, 784, 1047, 255);
+  delay(100);
+  off();
+  delay(50);
+  // demoWav();
+
+
+  WiFi.hostname("tooth1");
+  WiFi.begin("robotoverlords", "TODO");
+
+  Serial.print("Connecting");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  Serial.print("Connected, IP address: ");
+  Serial.println(WiFi.localIP());
+
+
+  Serial.print("Listening on port ");
+  Serial.println(PORT);
+  server.begin();
+
+  Serial.println("Setup complete");
+}
+
+
+uint8_t ser_i = 0;
+uint8_t serbuf[12];
+uint64_t nextIdleSeq = 0;
 void loop()
 {
   WiFiClient client = server.available();
@@ -117,16 +151,23 @@ void loop()
     Serial.println("Client disconnected");
   }
 
-  Serial.println("Playing idle sequence");
+  uint64_t now = millis();
+  while (Serial.available()) {
+    nextIdleSeq = now + IDLE_SEQ_DELAY;
+    serbuf[ser_i++] = Serial.read();
+    if (ser_i >= 12) {
+      writeBuf(DEV1, serbuf, 6);
+      writeBuf(DEV2, serbuf+6, 6);
+      ser_i = 0;
+    }
 
-  chord(660, 784, 1047, 255);
-  delay(100);
-  off();
-  delay(100);
-  chord(660, 784, 1047, 255);
-  delay(700);
-  off();
-  delay(5000);
+  }
+
+  if (now > nextIdleSeq) {
+    Serial.println("Playing idle sequence");
+    nextIdleSeq = now + IDLE_SEQ_DELAY;
+    idleSeq();
+  }
 
   /*
   Wire.requestFrom(DEV, 2, false);
