@@ -14,7 +14,7 @@
 #include <ESP8266WiFi.h>
 
 #define PORT 8101
-
+#define SERIAL_RX_BUFFER_SIZE 256
 #define IDLE_SEQ_DELAY 10000
 
 WiFiServer server(PORT);
@@ -70,9 +70,9 @@ void demoWav() {
 }
 
 
-void chord(uint16_t fA, uint16_t fB, uint16_t fC, uint8_t vol) {
-  writeFreq(DEV1, fA, 0, vol, vol);
-  writeFreq(DEV2, fB, fC, vol, vol);
+void chord(uint16_t fA, uint16_t fB, uint16_t fC, uint16_t fD, uint8_t vol) {
+  writeFreq(DEV1, fA, fB, vol, vol);
+  writeFreq(DEV2, fC, fD, vol, vol);
 }
 
 void off() {
@@ -80,43 +80,43 @@ void off() {
   writeFreq(DEV2, 0, 0, 0, 0);
 }
 
-void idleSeq() {
-  chord(660, 784, 1047, 255);
+void startupSeq() {
+
+  chord(660, 0, 0, 0, 255);
+  delay(100);
+  chord(0, 784, 0, 0, 255);
+  delay(100);
+  chord(0, 0, 1047, 0, 255);
+  delay(100);
+  chord(0, 0, 0, 1319, 255);
   delay(100);
   off();
-  delay(100);
-  chord(660, 784, 1047, 255);
+}
+
+void idleSeq() {
+  chord(660, 784, 1047, 2093, 255);
+  delay(50);
+  off();
+  delay(50);
+  chord(660, 784, 1047, 2093, 255);
   delay(700);
   off();
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(1000000);
 
   // Wire.setClock(400000); // FAST I2C Mode
   Wire.begin(); // join i2c bus (address optional for master)
-  chord(660, 784, 1047, 255);
-  delay(100);
-  off();
+  startupSeq();
   delay(50);
   // demoWav();
 
 
+  Serial.print("Beginning async WIFI connection");
   WiFi.hostname("tooth1");
   WiFi.begin("robotoverlords", "TODO");
-
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
-
 
   Serial.print("Listening on port ");
   Serial.println(PORT);
@@ -129,26 +129,35 @@ void setup()
 uint8_t ser_i = 0;
 uint8_t serbuf[12];
 uint64_t nextIdleSeq = 0;
+bool wifi_connected = false;
 void loop()
 {
-  WiFiClient client = server.available();
-  if (client)
-  {
-    Serial.println("Client connected");
-    uint8_t buf[12];
-    while (client.connected()) {
-      if (client.available() >= 12) {
-        client.read(buf, 12);
-        for (int i = 0; i < 12; i++) {
-          Serial.print(buf[i]);
-          Serial.print(" ");
-        }
-        Serial.println();
-        writeBuf(DEV1, buf, 6);
-        writeBuf(DEV2, buf+6, 6);
-      }
+
+  if (!wifi_connected) {
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("Connected, IP address: ");
+      Serial.println(WiFi.localIP());
+      wifi_connected = true;
     }
-    Serial.println("Client disconnected");
+  } else {
+    WiFiClient client = server.available();
+    if (client) {
+      Serial.println("Client connected");
+      uint8_t buf[12];
+      while (client.connected()) {
+        if (client.available() >= 12) {
+          client.read(buf, 12);
+          for (int i = 0; i < 12; i++) {
+            Serial.print(buf[i]);
+            Serial.print(" ");
+          }
+          Serial.println();
+          writeBuf(DEV1, buf, 6);
+          writeBuf(DEV2, buf+6, 6);
+        }
+      }
+      Serial.println("Client disconnected");
+    }
   }
 
   uint64_t now = millis();
