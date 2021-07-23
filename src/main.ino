@@ -19,9 +19,8 @@
 
 WiFiServer server(PORT);
 
-#define DEV1 64
-#define DEV2 65
-// 64
+#define DEV1 63
+#define DEV2 64
 
 void writeBuf(uint8_t device, uint8_t* buf, uint16_t len) {
   Wire.beginTransmission(device);
@@ -70,9 +69,13 @@ void demoWav() {
 }
 
 
-void chord(uint16_t fA, uint16_t fB, uint16_t fC, uint16_t fD, uint8_t vol) {
-  writeFreq(DEV1, fA, fB, vol, vol);
-  writeFreq(DEV2, fC, fD, vol, vol);
+void chord(uint16_t fA, uint16_t fB, uint16_t fC, uint16_t fD) {
+  uint8_t vA = (fA == 0) ? 0 : 255;
+  uint8_t vB = (fB == 0) ? 0 : 255;
+  uint8_t vC = (fC == 0) ? 0 : 255;
+  uint8_t vD = (fD == 0) ? 0 : 255;
+  writeFreq(DEV1, fA, fB, vA, vB);
+  writeFreq(DEV2, fC, fD, vC, vD);
 }
 
 void off() {
@@ -82,23 +85,23 @@ void off() {
 
 void startupSeq() {
 
-  chord(660, 0, 0, 0, 255);
+  chord(330, 0, 0, 0);
   delay(100);
-  chord(0, 784, 0, 0, 255);
+  chord(0, 392, 0, 0);
   delay(100);
-  chord(0, 0, 1047, 0, 255);
+  chord(0, 0, 524, 0);
   delay(100);
-  chord(0, 0, 0, 1319, 255);
+  chord(0, 0, 0, 660);
   delay(100);
   off();
 }
 
 void idleSeq() {
-  chord(660, 784, 1047, 2093, 255);
+  chord(330, 392, 524, 660);
   delay(50);
   off();
   delay(50);
-  chord(660, 784, 1047, 2093, 255);
+  chord(330, 392, 524, 660);
   delay(700);
   off();
 }
@@ -107,10 +110,11 @@ void setup()
 {
   Serial.begin(1000000);
 
-  // Wire.setClock(400000); // FAST I2C Mode
+  Wire.setClock(400000); // FAST I2C Mode
   Wire.begin(); // join i2c bus (address optional for master)
   startupSeq();
   delay(50);
+  idleSeq();
   // demoWav();
 
 

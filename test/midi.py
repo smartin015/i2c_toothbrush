@@ -130,7 +130,7 @@ def getFrequency(note):
     return freq * (2 ** octaveShift)
 
 def getIntFrequency(note):
-    return notesMIDI[note - 21] * 2 # Double freq for motor control reasons
+    return notesMIDI[note - 21]
 
 def writeNotes(ns):
   buf = struct.pack('=HHBBHHBB', 
@@ -146,9 +146,9 @@ if __name__ == "__main__":
     parser.add_argument("--dev", type=str, default="/dev/ttyUSB0", help="target device (\"/dev/tty*\" or \"<ip>:<port>\")")
     parser.add_argument("--baud", type=int, default=1000000, help="baud rate if --dev is a serial device")
     parser.add_argument("--speed", type=float, help="Speed multiplier", default=1.0)
-    parser.add_argument("--verbose", type=bool, default=False, help="Show debug text")
+    parser.add_argument("--verbose", action='store_true', help="Show debug text")
     parser.add_argument('--force-custom-voices', dest='force_custom_voices', action='store_true')
-    parser.set_defaults(force_custom_voices=False)
+    parser.set_defaults(force_custom_voices=False, verbose=False)
     parser.add_argument("--nchan", type=int, default=4, help="Number of device channels")
     parser.add_argument("--loop", type=int, default=0, help="Number of times to loop (-1 loops forever")
     args = parser.parse_args()
