@@ -175,7 +175,7 @@ void loop()
   if (now > nextIdleSeq) {
     Serial.println("Playing idle sequence");
     nextIdleSeq = now + IDLE_SEQ_DELAY;
-    idleSeq();
+    // idleSeq();
   }
 
   /*
