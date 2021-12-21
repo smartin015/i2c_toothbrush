@@ -32,8 +32,9 @@ def parse(file, speed, debug, nchan, force_custom_voices):
     for evt in c:
       if evt.type != "note_on" and evt.type != "note_off":
         continue
+
       if debug:
-        print(f"ch{evt.channel} note {evt.note} vel {evt.velocity} @{evt.time} ({time}s) {evt.type} - {active}")
+        pre = list(active)
 
       # evt.time is relative time - if we're advancing in time then push a snapshot of the notes
       if evt.time != 0:
@@ -44,12 +45,13 @@ def parse(file, speed, debug, nchan, force_custom_voices):
           notes += [OFF] * (nchan - len(notes))
         else:
           notes = list(active)
+        print("COMMIT", (t, notes, evt.time), "\n\n")
         result.append((t, notes, evt.time))
         last_time = time
       t += (evt.time/speed)
-
       hz = int(getIntFrequency(evt.note))
-      i = evt.channel % nchan # Prevent overflowa
+
+      i = evt.channel % nchan # Prevent overflow
       if evt.type == "note_on":
         e = (hz, 2*evt.velocity) # Max midi velocity is 127, not 255
         if ignore_channels:
@@ -61,8 +63,11 @@ def parse(file, speed, debug, nchan, force_custom_voices):
               break
           if not ins:
             active.append(e)
-        elif active[i][0] == 0:
-          active[i] = e 
+        else:
+          if active[i][0] == 0:
+            active[i] = e 
+          else:
+            print(f"WARNING: note_on for already on channel {i}; ignoring")
       else:
         if ignore_channels:
           for (i, nv) in enumerate(active):
@@ -78,6 +83,9 @@ def parse(file, speed, debug, nchan, force_custom_voices):
           active = newActive + tail
         elif active[i][0] == hz:
           active[i] = OFF
+      if debug:
+        print(f"ch{evt.channel} {evt.type:8} note {evt.note:5} vel {evt.velocity:5} @{evt.time:0.4f} ({t:0.4f}s) - pre {pre} -> {active}")
+
 
     # Snapshot end state
     if ignore_channels:
@@ -133,6 +141,7 @@ def getIntFrequency(note):
     return notesMIDI[note - 21]
 
 def writeNotes(ns):
+  pass
   buf = struct.pack('=HHBBHHBB', 
     int(ns[0][0]), int(ns[1][0]), int(ns[0][1]), int(ns[1][1]), 
     int(ns[2][0]), int(ns[3][0]), int(ns[2][1]), int(ns[3][1]))
@@ -173,8 +182,10 @@ if __name__ == "__main__":
         start = time.time()
         for (t, e, evtt) in seq:
           if args.verbose:
-            print(evtt,t,e)
-          next_tick = (start + t) # - time.time()
+            n = "".join([f"{n:5}" for (n,v) in e])
+            v = "".join([f"{v:5}" for (n,v) in e])
+            print(f"{t:.4f}    {n}    {v}     {evtt:.4f}")
+          next_tick = (start + t)
           while time.time() < next_tick:
             continue
           writeNotes(e)
